@@ -53,6 +53,29 @@ def draw_multiline_centered(surf, text, font, color, cx, y, line_h=24, shadow=Tr
     return y
 
 
+def wrap_text(text, font, max_width):
+    """Split *text* into lines that each fit within *max_width* pixels.
+
+    Existing hard newlines (\\n) are always honoured first.
+    Returns a list of strings ready for rendering.
+    """
+    result = []
+    for paragraph in text.split("\n"):
+        words = paragraph.split(" ")
+        line = ""
+        for word in words:
+            test = (line + " " + word).strip()
+            if font.size(test)[0] <= max_width:
+                line = test
+            else:
+                if line:
+                    result.append(line)
+                line = word
+        if line:
+            result.append(line)
+    return result
+
+
 def draw_polished_button(surf, rect, color, hovered=False, radius=None,
                          label=None, font=None, text_col=(255, 255, 255)):
     """3-D cartoon button: shadow, 3-D base, shine stripe, hover glow."""

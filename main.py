@@ -6,7 +6,7 @@ from flipper    import Flipper
 from bin_target import BinTarget
 from obstacles  import build_side_obstacles
 from draw_utils import (rounded_rect, draw_outlined_text,
-                        draw_multiline_centered, draw_polished_button,
+                        draw_multiline_centered, wrap_text, draw_polished_button,
                         draw_glass_panel, draw_nature_background, draw_flower_bumper)
 
 warnings.filterwarnings("ignore", message=".*system font.*couldn't be found.*")
@@ -374,86 +374,126 @@ def draw_waste_card():
 
 
 def draw_next_waste_panel():
-    """Bottom-right panel: preview of the next waste + round progress bar."""
-    cw = int(160 * SCALE_X)
-    ch = int(126 * SCALE_Y)
-    cx = SCREEN_W - cw - int(8 * SCALE_X)
-    cy = SCREEN_H - tip_surf.get_height() - ch - int(6 * SCALE_Y)
+    """Bottom-right panel: next waste preview + round progress bar.
+
+    Visual layout (top-down cursor, progress section pinned to bottom):
+      ┌─────────────────────┐
+      │  [ SUIVANT  ▶ ]     │  ← coloured badge header
+      │        🖼            │  ← sprite, scaled to fit its zone
+      │    Nom du déchet    │  ← waste name, auto-wrapped to card width
+      │  · · · · · · · · ·  │  ← thin separator
+      │    Manche X / Y     │  ← progress label   (bottom-pinned)
+      │  [======--------]   │  ← progress bar     (bottom-pinned)
+      └─────────────────────┘
+    """
+    PAD_H = int(10 * SCALE_X)   # left/right inner margin
+    PAD_V = int(5  * SCALE_Y)   # vertical gap between sections
+
+    cw    = int(160 * SCALE_X)
+    ch    = int(135 * SCALE_Y)  # taller card → enough room for all sections
+    cx    = SCREEN_W - cw - int(8 * SCALE_X)
+    cy    = SCREEN_H - tip_surf.get_height() - ch - int(6 * SCALE_Y)
     card_r = int(16 * UI)
 
     next_name, _, next_col = WASTE_LIST[next_waste_idx]
-    dark_col = tuple(max(0, c - 60) for c in next_col)
+    dark_col  = tuple(max(0, c - 60) for c in next_col)
+    sep_col   = tuple(min(255, c + 50) for c in dark_col)  # muted line colour
 
-    # Outer glow (category colour)
+    # ── Outer category-colour glow ────────────────────────────────────────
     glow = pygame.Surface((cw + 16, ch + 16), pygame.SRCALPHA)
     pygame.draw.rect(glow, (*next_col, 48), (0, 0, cw + 16, ch + 16),
                      border_radius=card_r + 4)
     screen.blit(glow, (cx - 8, cy - 8))
 
-    # Card shadow
+    # ── Soft drop shadow ──────────────────────────────────────────────────
     sh = pygame.Surface((cw + 8, ch + 8), pygame.SRCALPHA)
-    pygame.draw.rect(sh, (0, 0, 0, 70), (0, 0, cw + 8, ch + 8), border_radius=card_r)
+    pygame.draw.rect(sh, (0, 0, 0, 70), (0, 0, cw + 8, ch + 8),
+                     border_radius=card_r)
     screen.blit(sh, (cx + 3, cy + 5))
 
-    # Card body
+    # ── Card body ─────────────────────────────────────────────────────────
     draw_glass_panel(screen, (cx, cy, cw, ch),
                      fill_col=(240, 250, 240), alpha=242,
-                     radius=card_r, border_col=next_col, border_w=max(2, int(2 * UI)))
+                     radius=card_r, border_col=next_col,
+                     border_w=max(2, int(2 * UI)))
 
-    # "SUIVANT" badge at top
-    bh = int(24 * UI)
+    # ── Pre-compute section heights ───────────────────────────────────────
+    badge_h = int(20 * UI)              # header badge
+    bar_h   = int(10 * UI)              # progress bar
+    lh      = FONT_SMALL.get_height()   # single text-line height
+
+    # Wrap name to card content width so no line ever overflows
+    content_w  = cw - PAD_H * 2
+    name_lines = wrap_text(next_name, FONT_SMALL, content_w)
+    name_blk_h = len(name_lines) * lh
+
+    # Space locked at top:    top-pad + badge + gap
+    top_rsv    = PAD_V + badge_h + PAD_V
+    # Space locked at bottom: sep + gap + label + gap + bar + bottom-pad
+    bottom_rsv = int(2 * SCALE_Y) + PAD_V + lh + int(3 * SCALE_Y) + bar_h + PAD_V
+    # Remaining middle is shared between sprite zone + gap + name block
+    middle_h   = ch - top_rsv - bottom_rsv
+    sprite_zone = max(int(28 * SCALE_Y), middle_h - PAD_V - name_blk_h)
+
+    # ── 1. Header badge ───────────────────────────────────────────────────
+    badge_y = cy + PAD_V
     rounded_rect(screen, next_col,
-                 (cx + int(6 * SCALE_X), cy + int(6 * SCALE_Y),
-                  cw - int(12 * SCALE_X), bh),
-                 radius=int(10 * UI))
-    lbl = FONT_SMALL.render("SUIVANT ▶", True, (255, 255, 255))
+                 (cx + PAD_H, badge_y, content_w, badge_h),
+                 radius=int(9 * UI))
+    lbl = FONT_SMALL.render("SUIVANT  ▶", True, (255, 255, 255))
     screen.blit(lbl, (cx + cw // 2 - lbl.get_width() // 2,
-                      cy + int(8 * SCALE_Y)))
+                      badge_y + badge_h // 2 - lbl.get_height() // 2))
 
-    # Preview sprite (centered in card below badge)
+    # ── 2. Sprite (scaled to fit its zone, centred) ───────────────────────
+    sprite_y    = badge_y + badge_h + PAD_V
     preview_img = _preview_waste._base_image
-    max_px = min(cw - int(16 * SCALE_X), ch - bh - int(36 * SCALE_Y))
-    pw, ph = preview_img.get_width(), preview_img.get_height()
-    scale  = min(max_px / max(pw, ph, 1), 1.0)
+    max_px      = min(content_w, sprite_zone)
+    pw, ph      = preview_img.get_width(), preview_img.get_height()
+    scale       = min(max_px / max(pw, ph, 1), 1.0)
     if scale < 0.99:
         preview_img = pygame.transform.smoothscale(
             preview_img, (max(1, int(pw * scale)), max(1, int(ph * scale))))
-    sprite_y = cy + bh + int(6 * SCALE_Y)
-    sprite_area_h = ch - bh - int(44 * SCALE_Y)
     screen.blit(preview_img,
-                (cx + cw // 2 - preview_img.get_width() // 2,
-                 sprite_y + sprite_area_h // 2 - preview_img.get_height() // 2))
+                (cx + cw // 2 - preview_img.get_width()  // 2,
+                 sprite_y + sprite_zone // 2 - preview_img.get_height() // 2))
 
-    # Waste name below sprite
-    name_y = sprite_y + sprite_area_h
-    for i, line in enumerate(next_name.split("\n")):
+    # ── 3. Waste name (auto-wrapped, horizontally centred) ────────────────
+    name_y = sprite_y + sprite_zone
+    for i, line in enumerate(name_lines):
         t = FONT_SMALL.render(line, True, dark_col)
         screen.blit(t, (cx + cw // 2 - t.get_width() // 2,
-                        name_y + i * FONT_SMALL.get_height()))
+                        name_y + i * lh))
 
-    # ── Round progress bar ────────────────────────────────────────────────
-    bar_h  = int(10 * UI)
-    bar_mx = int(10 * SCALE_X)
-    bar_y  = cy + ch - bar_h - int(8 * SCALE_Y)
-    bar_w  = cw - bar_mx * 2
-    # Track
+    # ── 4. Separator line ─────────────────────────────────────────────────
+    sep_y = cy + ch - bottom_rsv + int(2 * SCALE_Y)
+    pygame.draw.line(screen, sep_col,
+                     (cx + PAD_H, sep_y), (cx + cw - PAD_H, sep_y), 1)
+
+    # ── 5. Progress label + bar (pinned to card bottom) ───────────────────
+    bar_y  = cy + ch - PAD_V - bar_h
+    prog_y = bar_y - int(3 * SCALE_Y) - lh
+    bar_w  = content_w
+
+    # "Manche X / Y"  — larger, bolder look via outlined helper
+    draw_outlined_text(screen, f"Manche  {round_num} / {MAX_ROUNDS}",
+                       FONT_SMALL, (255, 255, 255),
+                       cx + cw // 2, prog_y,
+                       outline_col=dark_col, outline_w=1, shadow=False)
+
+    # Track (background)
     pygame.draw.rect(screen, (180, 220, 180),
-                     (cx + bar_mx, bar_y, bar_w, bar_h),
+                     (cx + PAD_H, bar_y, bar_w, bar_h),
                      border_radius=bar_h // 2)
-    # Fill (rounds completed)
+    # Fill (rounds completed so far)
     filled = int(bar_w * min(round_num - 1, MAX_ROUNDS) / MAX_ROUNDS)
     if filled > 0:
         pygame.draw.rect(screen, next_col,
-                         (cx + bar_mx, bar_y, filled, bar_h),
+                         (cx + PAD_H, bar_y, filled, bar_h),
                          border_radius=bar_h // 2)
     # Border
     pygame.draw.rect(screen, dark_col,
-                     (cx + bar_mx, bar_y, bar_w, bar_h),
+                     (cx + PAD_H, bar_y, bar_w, bar_h),
                      max(1, bar_h // 5), border_radius=bar_h // 2)
-    # Round counter label
-    prog_txt = FONT_SMALL.render(f"{round_num}/{MAX_ROUNDS}", True, dark_col)
-    screen.blit(prog_txt, (cx + cw // 2 - prog_txt.get_width() // 2,
-                           bar_y - prog_txt.get_height() - int(1 * SCALE_Y)))
 
 
 def draw_tip_bar():
