@@ -1,4 +1,4 @@
-from codecarbon import EmissionsTracker
+﻿from codecarbon import EmissionsTracker
 import pygame, sys, math, random, warnings
 from constants import *
 from ball       import Waste
@@ -505,16 +505,18 @@ def draw_controls_hint():
     """Key-badge style control hint shown before launch."""
     if waste_launched:
         return
-    hw = int(340 * SCALE_X)
-    hh = int(32 * SCALE_Y)
-    hx = SCREEN_W // 2 - hw // 2
-    hy = SCREEN_H - int(0.16 * SCREEN_H) - hh
-    draw_glass_panel(screen, (hx, hy, hw, hh),
-                     fill_col=(0, 0, 0), alpha=115, radius=int(16 * UI))
     h = FONT_SMALL.render(
         "← Flipper gauche  |  ESPACE Lancer  |  Flipper droit →",
         True, (215, 255, 215))
-    screen.blit(h, (SCREEN_W // 2 - h.get_width() // 2, hy + int(8 * SCALE_Y)))
+    pad_x = int(16 * SCALE_X)
+    pad_y = int(8 * SCALE_Y)
+    hw = h.get_width() + pad_x * 2
+    hh = h.get_height() + pad_y * 2
+    hx = SCREEN_W // 2 - hw // 2
+    hy = SCREEN_H - int(0.30 * SCREEN_H) - hh
+    draw_glass_panel(screen, (hx, hy, hw, hh),
+                     fill_col=(0, 0, 0), alpha=115, radius=int(16 * UI))
+    screen.blit(h, (SCREEN_W // 2 - h.get_width() // 2, hy + pad_y))
 
 
 def draw_screen_flash():
