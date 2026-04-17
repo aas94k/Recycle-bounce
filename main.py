@@ -273,7 +273,7 @@ def draw_header():
     screen.blit(shine_s, (bx + 5, by + 3))
 
     # Score text
-    disp = int(score_display)
+    disp = round(score_display)
     sc_txt = FONT_BIG.render(f"⭐ {disp}", True, (60, 30, 0))
     screen.blit(sc_txt, (bx + bw // 2 - sc_txt.get_width() // 2,
                          by + bh // 2 - sc_txt.get_height() // 2))
@@ -927,23 +927,18 @@ while True:
                     name, _card_cat, col = WASTE_LIST[waste_idx]
                     round_num += 1
                     if waste.type == b.category:
-                        combo += 1
-                        combo_timer = FPS * 5
-                        mult = min(1 + (combo // 2), 5)
-                        pts  = 10 * mult
-                        score += pts
+                        score += 10
                         score_flash = 45
-                        message  = f"✅  Super ! +{pts} (x{mult})"
+                        message  = "✅  Super ! +10 points"
                         msg_good = True
                         spawn_particles(int(waste.x), int(waste.y), col, n=22)
                         screen_flash_col   = (0, 220, 100)
                         screen_flash_timer = 20
-                        print(f"[Tri] Correct: {waste.type!r} → {b.category!r} (+{pts})")
+                        print(f"[Tri] Correct: {waste.type!r} → {b.category!r} (+10)")
                     else:
                         score = max(0, score - 3)
-                        message  = f"❌  Va dans {correct_bin_for(waste.type)} !"
+                        message  = f"❌  -3 points ! Va dans {correct_bin_for(waste.type)} !"
                         msg_good = False
-                        combo = 0; combo_timer = 0
                         spawn_particles(int(waste.x), int(waste.y), (255, 80, 80), n=12)
                         screen_flash_col   = (255, 60, 60)
                         screen_flash_timer = 16
